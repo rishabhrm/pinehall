@@ -1,122 +1,93 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { JoinModal } from './components/JoinModal';
+import { StatusBar } from './components/StatusBar';
+import { VideoStrip } from './components/VideoStrip';
+import { PhaserGame } from './components/PhaserGame';
+import { useWebRTC } from './hooks/useWebRTC';
+import { BACKEND_URL } from './config';
+import type { PlayersMap } from './types';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [joined, setJoined] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [myId, setMyId] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('Connecting to server...');
+  const [socket, setSocket] = useState<any>(null);
+
+  const allPlayersRef = useRef<PlayersMap>({});
+
+  // Pass joined as the 4th argument so mic/cam permission triggers after clicking Join
+  const {
+    localStream,
+    remotePeers,
+    micOn,
+    camOn,
+    toggleMic,
+    toggleCam,
+    updateProximityPeers,
+    destroyPeerConnection,
+  } = useWebRTC(socket, myId, allPlayersRef, joined);
+
+  useEffect(() => {
+    if (!joined) return;
+
+    if (!window.io) {
+      console.error(
+        'Socket.IO client library not found on window. Ensure CDN script is loaded in index.html.'
+      );
+      return;
+    }
+
+    const s = window.io(BACKEND_URL);
+    setSocket(s);
+
+    return () => {
+      s.disconnect();
+      setSocket(null);
+    };
+  }, [joined]);
+
+  const handleJoin = (name: string) => {
+    setPlayerName(name);
+    setJoined(true);
+  };
+
+  const handleSetMyId = useCallback((id: string) => {
+    setMyId(id);
+  }, []);
+
+  const handleStatusUpdate = useCallback((msg: string) => {
+    setStatusMessage(msg);
+  }, []);
+
+  if (!joined) {
+    return <JoinModal onJoin={handleJoin} />;
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <div id="app" style={{ display: 'block' }}>
+      <StatusBar message={statusMessage} />
+      <VideoStrip
+        localStream={localStream}
+        playerName={playerName}
+        micOn={micOn}
+        camOn={camOn}
+        onToggleMic={toggleMic}
+        onToggleCam={toggleCam}
+        remotePeers={remotePeers}
+      />
+      {socket && (
+        <PhaserGame
+          socket={socket}
+          playerName={playerName}
+          onSetMyId={handleSetMyId}
+          allPlayersRef={allPlayersRef}
+          onProximityUpdate={updateProximityPeers}
+          onStatusUpdate={handleStatusUpdate}
+          onDestroyPeer={destroyPeerConnection}
+        />
+      )}
+    </div>
+  );
 }
-
-export default App
